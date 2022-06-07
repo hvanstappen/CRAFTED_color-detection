@@ -1,0 +1,76 @@
+# read image and identified box coordinates
+# remove background
+# define colors
+
+import numpy as np
+import cv2 as cv
+from matplotlib import pyplot as plt
+import pandas as pd
+from sklearn.cluster import KMeans
+import imutils
+import json
+
+# number of colors
+clusters = 5
+
+# read variables from Knime table (as series)
+x = input_table_1['x1'][0]
+y = input_table_1['y1'][0]
+w = input_table_1['w'][0]
+h = input_table_1['h'][0]
+x2 = x+w
+y2 = y+h
+Path = input_table_1['Path'][0]
+Path_processed = input_table_1['Path_no_bckgrnd'][0]
+
+# create mask
+img = cv.imread(Path)
+mask = np.zeros(img.shape[:2],np.uint8)
+bgdModel = np.zeros((1,65),np.float64)
+fgdModel = np.zeros((1,65),np.float64)
+
+# define box with object
+rect = (x, y, w, h)
+
+# remove background
+cv.grabCut(img,mask,rect,bgdModel,fgdModel,5,cv.GC_INIT_WITH_RECT)
+mask2 = np.where((mask==2)|(mask==0),0,1).astype('uint8')
+img = img*mask2[:,:,np.newaxis]
+
+new_img = img.copy()
+new_img[np.where((mask2==0))] = np.array([255,255,255]).astype('uint8') #this allows you to change the background color after grabcut
+
+
+# crop image
+img = img[y:y2,x:x2]
+
+# resize image
+# img = imutils.resize(img,height=200)
+
+# OPTIONAL write image without backgound
+cv.imwrite(Path_processed, img)
+
+# create list of all colors
+flat_img = np.reshape(img,(-1,3))
+
+# calculate x main colors
+kmeans = KMeans(n_clusters=clusters,random_state=0)
+kmeans.fit(flat_img)
+dominant_colors = np.array(kmeans.cluster_centers_,dtype='uint')
+
+percentages = (np.unique(kmeans.labels_,return_counts=True)[1])/flat_img.shape[0]
+p_and_c = zip(percentages,dominant_colors)
+# p_and_c = sorted(p_and_c,reverse=True)
+print("percentages: ",percentages)
+print("dominant colors: ",dominant_colors)
+print("p and c: ",p_and_c)
+
+# pass input table to output table
+# and append result
+dominant_colors = pd.DataFrame(dominant_colors)
+percentages = pd.DataFrame(percentages)
+
+output_table_3 = percentages
+output_table_2 = dominant_colors
+output_table_1 = input_table_1
+
